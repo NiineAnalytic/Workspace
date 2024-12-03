@@ -1,0 +1,96 @@
+WITH fa_sod AS (
+    SELECT 
+        BEATS_ERP_ID,
+        Beats,
+        outlets_erp_id,
+        OUTLETS_NAME,
+        erp_code,
+        user_name,
+        SUM(net_value) AS sale
+    FROM 
+        fa_beatsummary_data.fa_sod_tilllastmonth
+    WHERE  
+        EXTRACT(YEAR FROM TO_DATE(ORDER_DATE, 'YYYY-MM-DD')) = 2024
+        AND EXTRACT(MONTH FROM TO_DATE(ORDER_DATE, 'YYYY-MM-DD')) IN (9,10,11)
+    GROUP BY 
+        BEATS_ERP_ID,
+        Beats,
+        outlets_erp_id,
+        OUTLETS_NAME,
+        erp_code,
+        user_name
+),
+master AS (
+    SELECT 
+        USER_ERP_ID,
+        zone,
+        region,
+        territory,
+        level_3_positions_user,
+        level_4_positions_user,
+        SUM(count_of_outlets) AS outlets_mapped
+    FROM (
+        SELECT DISTINCT 
+            USER_ERP_ID,
+            BEATS_ERP_ID,
+            zone,
+            region,
+            territory,
+            COUNT_OF_OUTLETS,
+            level_3_positions_user,
+            level_4_positions_user
+        FROM 
+            niine_data.master_position
+    ) AS subquery
+    GROUP BY 
+        USER_ERP_ID, zone, region, territory, level_3_positions_user, level_4_positions_user
+),
+raw AS (
+    SELECT 
+        mp.zone AS region,
+        mp.region AS zone,
+        mp.territory,
+        mp.level_4_positions_user,
+        mp.outlets_mapped,
+        fa_sod.*      
+    FROM 
+        fa_sod 
+    LEFT JOIN 
+        master mp
+    ON 
+        fa_sod.erp_code = mp.USER_ERP_ID
+) select * from raw where sale is null or sale=0,
+outlets_asm AS (
+    SELECT 
+        level_4_positions_user,
+        SUM(COUNT_OF_OUTLETS) AS outlets_asm
+        FROM 
+            niine_data.master_position
+    GROUP BY 
+         level_4_positions_user
+)
+select region, zone, level_4_positions_user, sum(mapped_outlets) as mapped,
+--sum(sales) as sales,
+sum(number_of_srs) as SRs, sum(outlets_billed) as outlets_billed, sum(outlets_not_billed) as outlets_not_billed
+from
+(
+SELECT 
+    r.region,
+    r.zone,
+    r.level_4_positions_user,
+    o.outlets_asm AS mapped_outlets,
+    --SUM(r.sale) as sales,
+    COUNT(DISTINCT r.erp_code) AS number_of_srs,
+    SUM(CASE WHEN r.sale > 0 THEN 1 ELSE 0 END) AS outlets_billed,
+    SUM(CASE WHEN r.sale <= 0 OR sale IS NULL THEN 1 ELSE 0 END) AS outlets_not_billed
+FROM 
+    raw r
+    left join outlets_asm o
+    on r.level_4_positions_user=o.level_4_positions_user
+GROUP BY 
+    r.region,
+    r.zone,
+    o.outlets_asm,
+    r.level_4_positions_user
+ )
+ group by  region, zone, level_4_positions_user;
