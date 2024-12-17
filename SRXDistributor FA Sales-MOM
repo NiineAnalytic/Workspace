@@ -1,0 +1,47 @@
+SELECT 
+    d.REGION,
+    d.ZONE,
+    d.TERRITORY,
+    d.ERP_CODE,
+    d.USER_NAME,
+    c.PRIMARY_CATEGORY,
+    TO_CHAR(TO_DATE(d.ORDER_DATE, 'YYYY-MM-DD'), 'MON-YYYY') AS MONTH, 
+    SUM(d.NET_VALUE) AS TOTAL_NET_VALUE
+FROM (
+    SELECT
+        b.REGION,
+        b.ZONE,
+        b.TERRITORY,
+        a.ERP_CODE,
+        a.USER_NAME,
+        a.ORDER_DATE,
+        a.PRODUCT_ERPID,
+        a.NET_VALUE
+    FROM 
+        s3_data_niine.fa_beatsummary_data.fa_sod_tilllastmonth a
+    JOIN 
+        S3_DATA_NIINE.NIINE_DATA.DB_MASTER b
+    ON 
+        a.distributor_erp_id = b.distributorerpid
+   -- WHERE
+      --  a.ORDER_DATE >= DATE_TRUNC('MONTH', CURRENT_DATE)
+      --  AND a.ORDER_DATE < DATEADD(MONTH, 1, DATE_TRUNC('MONTH', CURRENT_DATE))
+) d
+JOIN 
+    S3_DATA_NIINE.NIINE_DATA.PRODUCT_MASTER c
+ON 
+   REPLACE(d.product_erpid, '.0', '') = c.PRODUCT_ERP_ID
+GROUP BY 
+    d.REGION,
+    d.ZONE,
+    d.TERRITORY,
+    d.ERP_CODE,
+    d.USER_NAME,
+    c.PRIMARY_CATEGORY,
+    TO_CHAR(TO_DATE(d.ORDER_DATE, 'YYYY-MM-DD'), 'MON-YYYY') 
+ORDER BY 
+    d.REGION,
+    d.ZONE,
+    d.TERRITORY,
+    d.ERP_CODE,
+    MONTH;
